@@ -1,64 +1,101 @@
-import { BigInt } from "@graphprotocol/graph-ts"
+import { BigInt, Address, Bytes } from "@graphprotocol/graph-ts"
 import {
   Escrow,
   DefinedOfferCancelled,
   DisplayedOfferCancelled,
   OfferAccepted,
   OfferDefined,
-  OfferDisplayed
+  OfferDisplayed,
+  OfferDisplayedBundleNftsStruct,
+  OfferDisplayedBundlePouchesStruct,
+  OfferDefinedBundleNftsStruct,
+  OfferDefinedBundlePouchesStruct
 } from "../generated/Escrow/Escrow"
-import { ExampleEntity } from "../generated/schema"
+import { User, DisplayedOffer, DefinedOffer } from "../generated/schema"
 
-export function handleDefinedOfferCancelled(
-  event: DefinedOfferCancelled
-): void {
-  // Entities can be loaded from the store using a string ID; this ID
-  // needs to be unique across all entities of the same type
-  let entity = ExampleEntity.load(event.transaction.from.toHex())
-
-  // Entities only exist after they have been saved to the store;
-  // `null` checks allow to create entities on demand
-  if (!entity) {
-    entity = new ExampleEntity(event.transaction.from.toHex())
-
-    // Entity fields can be set using simple assignments
-    entity.count = BigInt.fromI32(0)
+export function handleOfferDisplayed(event: OfferDisplayed): void {
+  const displayedOffer = new DisplayedOffer(event.params.displayedOfferId)
+  displayedOffer.maker = getUser(event.params.maker).id
+  const nftContractAddresses:Bytes[] = []
+  const nftTokenIds:BigInt[] = []
+  const pouchContractAddresses:Bytes[] = []
+  const pouchValues:BigInt[] = []
+  for(let i = 0; i < event.params.bundle.nfts.length; i ++) {
+    const nft:OfferDisplayedBundleNftsStruct = event.params.bundle.nfts[i]
+    nftContractAddresses.push(nft.cAddr)
+    nftTokenIds.push(nft.tokenId)
   }
-
-  // BigInt and BigDecimal math are supported
-  entity.count = entity.count + BigInt.fromI32(1)
-
-  // Entity fields can be set based on event parameters
-  entity.definedOfferId = event.params.definedOfferId
-
-  // Entities can be written to the store with `.save()`
-  entity.save()
-
-  // Note: If a handler doesn't require existing field values, it is faster
-  // _not_ to load the entity from the store. Instead, create it fresh with
-  // `new Entity(...)`, set the fields that should be updated and save the
-  // entity back to the store. Fields that were not set or unset remain
-  // unchanged, allowing for partial updates to be applied.
-
-  // It is also possible to access smart contracts from mappings. For
-  // example, the contract that has emitted the event can be connected to
-  // with:
-  //
-  // let contract = Contract.bind(event.address)
-  //
-  // The following functions can then be called on this contract to access
-  // state variables and other data:
-  //
-  // - contract.definedOffers(...)
-  // - contract.displayedOffers(...)
+  for(let i = 0; i < event.params.bundle.pouches.length; i ++) {
+    const pouch:OfferDisplayedBundlePouchesStruct = event.params.bundle.pouches[i]
+    pouchContractAddresses.push(pouch.cAddr)
+    pouchValues.push(pouch.value)
+  }
+  displayedOffer.nftContractAddresses = nftContractAddresses
+  displayedOffer.nftTokenIds = nftTokenIds
+  displayedOffer.pouchContractAddresses = pouchContractAddresses
+  displayedOffer.pouchValues = nftTokenIds
+  displayedOffer.cancelled = false
+  displayedOffer.name = event.params.name
+  displayedOffer.save()
 }
 
-export function handleDisplayedOfferCancelled(
-  event: DisplayedOfferCancelled
-): void {}
+export function handleOfferDefined(event: OfferDefined): void {
+  const definedOffer = new DefinedOffer(event.params.definedOfferId)
+  definedOffer.maker = getUser(event.params.maker).id
+  definedOffer.displayedOffer = event.params.displayedOfferId
+  const nftContractAddresses:Bytes[] = []
+  const nftTokenIds:BigInt[] = []
+  const pouchContractAddresses:Bytes[] = []
+  const pouchValues:BigInt[] = []
+  for(let i = 0; i < event.params.bundle.nfts.length; i ++) {
+    const nft:OfferDefinedBundleNftsStruct = event.params.bundle.nfts[i]
+    nftContractAddresses.push(nft.cAddr)
+    nftTokenIds.push(nft.tokenId)
+  }
+  for(let i = 0; i < event.params.bundle.pouches.length; i ++) {
+    const pouch:OfferDefinedBundlePouchesStruct = event.params.bundle.pouches[i]
+    pouchContractAddresses.push(pouch.cAddr)
+    pouchValues.push(pouch.value)
+  }
+  definedOffer.nftContractAddresses = nftContractAddresses
+  definedOffer.name = event.params.name
+  definedOffer.nftTokenIds = nftTokenIds
+  definedOffer.pouchContractAddresses = pouchContractAddresses
+  definedOffer.pouchValues = nftTokenIds
+  definedOffer.cancelled = false
+  definedOffer.accepted = false
+  definedOffer.save()
+}
 
-export function handleOfferAccepted(event: OfferAccepted): void {}
+export function handleDefinedOfferCancelled(event: DefinedOfferCancelled): void {
+  const definedOffer = DefinedOffer.load(event.params.definedOfferId)!
+  definedOffer.cancelled = true
+  definedOffer.save()
+}
 
-export function handleOfferDefined(event: OfferDefined): void {}
+export function handleDisplayedOfferCancelled(event: DisplayedOfferCancelled): void {
+  const displayedOffer = DisplayedOffer.load(event.params.displayedOfferId)!
+  displayedOffer.cancelled = true
+  displayedOffer.save()
+}
 
-export function handleOfferDisplayed(event: OfferDisplayed): void {}
+export function handleOfferAccepted(event: OfferAccepted): void {
+  const definedOffer = DefinedOffer.load(event.params.definedOfferId)!
+  definedOffer.accepted = true
+  definedOffer.save()
+
+  const displayedOffer = DisplayedOffer.load(event.params.displayedOfferId)!
+  displayedOffer.acceptedOffer = definedOffer.id
+  displayedOffer.save()
+}
+
+function getUser(address: Address): User {
+  const id = address.toHexString()
+  let user = User.load(id)
+  if(!user) {
+    user = new User(id)
+    user.address = address
+    user.save()
+  }
+  return user
+}

@@ -1,6 +1,6 @@
 specVersion: 0.0.4
 schema:
-  file: ./schema.graphql
+  file: schema.graphql
 dataSources:
   - kind: ethereum
     name: Escrow
@@ -21,7 +21,7 @@ dataSources:
         - OfferDisplayed
       abis:
         - name: Escrow
-          file: ./abis/Escrow.json
+          file: Escrow\abis\Escrow.json
       eventHandlers:
         - event: DefinedOfferCancelled(string)
           handler: handleDefinedOfferCancelled
@@ -33,4 +33,4 @@ dataSources:
           handler: handleOfferDefined
         - event: OfferDisplayed(string,address,string,((address,uint256)[],(address,uint256)[]))
           handler: handleOfferDisplayed
-      file: ./src/escrow.ts
+      file: Escrow\Escrow.wasm
